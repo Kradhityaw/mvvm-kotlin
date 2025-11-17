@@ -3,26 +3,34 @@ package com.example.kotlinsupabase.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.kotlinsupabase.data.repository.AuthRepository
-import com.example.kotlinsupabase.domain.model.AuthResult
+import com.example.kotlinsupabase.domain.model.AuthEvent
 import com.example.kotlinsupabase.utils.ErrorHandler
 import com.example.kotlinsupabase.utils.InputValidator
 import com.example.kotlinsupabase.utils.ValidationResult
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
 class SignInViewModel(
     private val authRepository: AuthRepository = AuthRepository()
 ) : ViewModel() {
 
-    private val _authState = MutableStateFlow<AuthResult>(AuthResult.Success)
-    val authState: StateFlow<AuthResult> = _authState
+    // State untuk loading
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading
 
+    // State untuk error input
     private val _emailError = MutableStateFlow<String?>(null)
     val emailError: StateFlow<String?> = _emailError
 
     private val _passwordError = MutableStateFlow<String?>(null)
     val passwordError: StateFlow<String?> = _passwordError
+
+    // Channel untuk single events (tidak menyimpan state)
+    private val _events = Channel<AuthEvent>()
+    val events = _events.receiveAsFlow()
 
     fun signInWithEmail(email: String, password: String) {
         // Validasi input
@@ -45,27 +53,33 @@ class SignInViewModel(
         }
 
         // Proses sign in
-        _authState.value = AuthResult.Loading
+        _isLoading.value = true
         viewModelScope.launch {
             try {
                 authRepository.signInWithEmail(email, password)
-                _authState.value = AuthResult.Success
+                _isLoading.value = false
+                // Kirim event navigate (hanya sekali)
+                _events.send(AuthEvent.NavigateToHome)
             } catch (e: Exception) {
+                _isLoading.value = false
                 val errorMessage = ErrorHandler.getErrorMessage(e)
-                _authState.value = AuthResult.Error(errorMessage)
+                // Kirim event error (hanya sekali)
+                _events.send(AuthEvent.ShowError(errorMessage))
             }
         }
     }
 
     fun signInWithGoogle(idToken: String) {
-        _authState.value = AuthResult.Loading
+        _isLoading.value = true
         viewModelScope.launch {
             try {
                 authRepository.signInWithGoogle(idToken)
-                _authState.value = AuthResult.Success
+                _isLoading.value = false
+                _events.send(AuthEvent.NavigateToHome)
             } catch (e: Exception) {
+                _isLoading.value = false
                 val errorMessage = ErrorHandler.getErrorMessage(e)
-                _authState.value = AuthResult.Error(errorMessage)
+                _events.send(AuthEvent.ShowError(errorMessage))
             }
         }
     }

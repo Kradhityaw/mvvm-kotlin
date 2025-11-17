@@ -1,5 +1,6 @@
 package com.example.kotlinsupabase
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -9,7 +10,7 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.kotlinsupabase.databinding.ActivitySignInBinding
-import com.example.kotlinsupabase.domain.model.AuthResult
+import com.example.kotlinsupabase.domain.model.AuthEvent
 import com.example.kotlinsupabase.presentation.viewmodel.SignInViewModel
 import com.example.kotlinsupabase.utils.GoogleAuthHelper
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -43,22 +44,33 @@ class SignInActivity : AppCompatActivity() {
     }
 
     private fun setupObservers() {
+        // Observe loading state
         lifecycleScope.launch {
-            viewModel.authState.collect { state ->
-                when (state) {
-                    is AuthResult.Loading -> showLoading()
-                    is AuthResult.Success -> {
-                        hideLoading()
-                        handleSuccessLogin()
+            viewModel.isLoading.collect { isLoading ->
+                if (isLoading) {
+                    showLoading()
+                } else {
+                    hideLoading()
+                }
+            }
+        }
+
+        // Observe single events (HANYA TERPANGGIL SEKALI!)
+        lifecycleScope.launch {
+            viewModel.events.collect { event ->
+                when (event) {
+                    is AuthEvent.NavigateToHome -> {
+                        Toast.makeText(this@SignInActivity, "Login berhasil!", Toast.LENGTH_SHORT).show()
+                        navigateToHome()
                     }
-                    is AuthResult.Error -> {
-                        hideLoading()
-                        showError(state.message)
+                    is AuthEvent.ShowError -> {
+                        Toast.makeText(this@SignInActivity, event.message, Toast.LENGTH_LONG).show()
                     }
                 }
             }
         }
 
+        // Observe error states
         lifecycleScope.launch {
             viewModel.emailError.collect { error ->
                 binding.etEmailBorder.error = error
@@ -93,24 +105,18 @@ class SignInActivity : AppCompatActivity() {
             if (idToken != null) {
                 viewModel.signInWithGoogle(idToken)
             } else {
-                showError("Gagal mendapatkan token dari Google")
+                Toast.makeText(this, "Gagal mendapatkan token dari Google", Toast.LENGTH_SHORT).show()
             }
         } catch (e: ApiException) {
             Log.e("Auth", "Google sign in failed: ${e.statusCode}")
-            showError("Login Google gagal")
+            Toast.makeText(this, "Login Google gagal", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun handleSuccessLogin() {
-        Toast.makeText(this, "Login berhasil!", Toast.LENGTH_SHORT).show()
-        // Navigate to MainActivity
-        // val intent = Intent(this, MainActivity::class.java)
-        // startActivity(intent)
-        // finish()
-    }
-
-    private fun showError(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    private fun navigateToHome() {
+        val intent = Intent(this, MainActivity::class.java)
+        startActivity(intent)
+        finish() // Tutup SignInActivity agar tidak bisa back
     }
 
     private fun showLoading() {
